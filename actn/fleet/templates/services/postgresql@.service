@@ -23,11 +23,11 @@ ExecStartPre=/usr/bin/docker pull valley/postgresql
 
 ExecStart=/usr/bin/docker run --name %p-%i -v /home/core/%p-%i:/var/lib/postgresql/9.3/main -w /var/lib/postgresql/9.3/main -p ${COREOS_PUBLIC_IPV4}::5432 -e PORT=5432 -e POSTGRESQL_USER=usr_%i -e POSTGRESQL_PASS=pass_%i -e POSTGRESQL_DB=db_%i valley/postgresql
 
-# ExecStartPost=/bin/bash -c "[[ -z $(docker images | grep valley/postgresql) ]] || while [[ -z $(docker ps | grep %p-%i) ]]; do echo 'waiting docker...'; sleep 1; done"
+ExecStartPost=/bin/bash -c "[[ -z $(docker images | grep valley/postgresql) ]] || while [[ -z $(docker ps | grep %p-%i) ]]; do echo 'waiting docker...'; sleep 1; done"
 
 ExecStop=/usr/bin/docker stop %p-%i
 
-# ExecStopPost=/home/core/actn/bin/actnctl docker:cleanup %p-%i
+ExecStopPost=/home/core/actn/bin/actnctl docker:cleanup %p-%i
 
 # [X-Fleet]
 # X-Conflicts=%p@*.service

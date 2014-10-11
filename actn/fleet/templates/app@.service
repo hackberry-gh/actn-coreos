@@ -14,4 +14,4 @@ ExecStart=/bin/bash -c "while true; do printf $(fleetctl list-units | grep %i); 
 ExecStop=/home/core/actn/bin/actnctl apps:stop %i
 
 [X-Fleet]
-X-Conflicts=%p@*.service
+X-Conflicts=%p@$i.service
