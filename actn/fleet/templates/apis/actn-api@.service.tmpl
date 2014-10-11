@@ -1,0 +1,31 @@
+[Unit]
+Description=Actn.io %p %i service
+
+# Requirements
+Requires=etcd.service
+Requires=docker.service
+Requires=postgresql-discovery@__app__.service
+Requires=%p-discovery@%i.service
+
+# Dependency ordering
+After=etcd.service
+After=docker.service
+After=postgresql-discovery@__app__.service
+Before=%p-discovery@%i.service
+
+[Service]
+TimeoutStartSec=0
+KillMode=none
+EnvironmentFile=/etc/environment
+
+ExecStartPre=/usr/bin/docker pull valley/actn-api
+
+ExecStartPre=-/usr/bin/docker kill %p-%i
+ExecStartPre=-/usr/bin/docker rm %p-%i
+ExecStartPre=-/usr/bin/docker run --rm -e DATABASE_URL=__database_url__ valley/actn-api bundle exec rake db:migrate
+
+ExecStart=/usr/bin/docker run --name %p-%i -p ${COREOS_PRIVATE_IPV4}::9000 -e SECRET=__secret__ -e DATABASE_URL=__database_url__ valley/actn-api actn-api __api_path__ -sv -p 9000
+
+ExecStartPost=/bin/bash -c "while [[ -z $(docker ps | grep %p-%i) ]]; do echo 'waiting docker...'; sleep 1; done"
+
+ExecStop=/usr/bin/docker stop %p-%i

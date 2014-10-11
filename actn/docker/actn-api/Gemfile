@@ -1,0 +1,5 @@
+source 'https://rubygems.org'
+
+ruby '2.1.2'
+
+gem 'actn-api', '~> 0.0.5'

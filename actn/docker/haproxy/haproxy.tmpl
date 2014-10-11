@@ -1,0 +1,88 @@
+global
+    pidfile /var/run/haproxy-id.pid
+    user    root
+    maxconn 2048
+    
+defaults
+    mode http
+
+    timeout     connect     5000ms
+    timeout     client      30000ms
+    timeout     server      30000ms    
+    
+    stats       enable
+    stats       auth          admin:password
+    stats       uri           /monitor
+    stats       refresh       5s
+    retries     5
+    
+    option      httpchk       GET /status
+    option      redispatch
+    option      httpclose
+    option      abortonclose
+    option      forwardfor
+    option      http-server-close    
+    
+    balance     roundrobin
+      
+frontend actn-api
+    
+    bind :5000
+    
+    monitor-uri         /haproxy
+        
+
+    acl a_pub_connect_path    path              /connect
+    acl a_pub_query_method    method            GET HEAD OPTIONS
+    acl a_pub_upsert_method   method            POST PUT PATCH
+    acl a_pub_delete_method   method            DELETE
+    
+    acl a_core_api_path       path_beg           /api
+    
+{{range $app := lsdir "/apps" }}
+    
+    acl a_pub_host_{{ $app }}    hdr_beg(host)     -i api.{{ $app }}.
+    
+    acl a_core_host_{{ $app }}   hdr_beg(host)      -i core.{{ $app }}.
+    
+    use_backend b_pub_connect_{{ $app }} if  a_pub_connect_path   a_pub_host_{{ $app }}
+    use_backend b_pub_query_{{ $app }}   if  a_pub_query_method   a_pub_host_{{ $app }}
+    use_backend b_pub_upsert_{{ $app }}  if  a_pub_upsert_method  a_pub_host_{{ $app }}
+    use_backend b_pub_delete_{{ $app }}  if  a_pub_delete_method  a_pub_host_{{ $app }}
+
+    use_backend b_core_back_{{ $app }}   if  a_core_api_path  a_core_host_{{ $app }}
+    use_backend b_core_front_{{ $app }}  if  a_core_host_{{ $app }}
+
+
+backend b_pub_connect_{{ $app }}
+{{ range $index, $server := gets "/apps/{{ $app }}/apis/public/connect" }}
+    server srv_pub_connect_{{ $app }}_{{ $index }} {{ $server.Value }}
+{{ end }}
+    
+backend b_pub_query_{{ $app }}
+{{ range $index, $server := gets "/apps/{{ $app }}/apis/public/query" }}
+    server srv_pub_query_{{ $app }}_{{ $index }} {{ $server.Value }}
+{{ end }}
+
+backend b_pub_upsert_{{ $app }}
+{{ range $index, $server := gets "/apps/{{ $app }}/apis/public/upsert" }}
+    server srv_pub_upsert_{{ $app }}_{{ $index }} {{ $server.Value }}
+{{ end }}
+
+backend b_pub_delete_{{ $app }}
+{{ range $index, $server := gets "/apps/{{ $app }}/apis/public/delete" }}
+    server srv_pub_delete_{{ $app }}_{{ $index }} {{ $server.Value }}
+{{ end }}
+    
+backend b_core_back_{{ $app }}
+  reqrep ^([^\ :]*)\ /api/(.*) \1\ /\2
+{{ range $index, $server := gets "/apps/{{ $app }}/apis/core/backend" }}
+    server srv_core_back_{{ $app }}_{{ $index }} {{ $server.Value }}
+{{ end }}  
+  
+backend b_core_front_{{ $app }}
+{{ range $index, $server := gets "/apps/{{ $app }}/apis/core/frontend" }}
+    server srv_core_front_{{ $app }}_{{ $index }} {{ $server.Value }}
+{{ end }}  
+    
+{{end}}
