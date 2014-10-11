@@ -55,33 +55,33 @@ frontend actn-api
 
 
 backend b_pub_connect_{{ $app }}
-{{ range $index, $server := gets "/apps/{{ $app }}/apis/public/connect" }}
+{{ range $index, $server := gets "/apps/{{ $app }}/actn/public/connect" }}
     server srv_pub_connect_{{ $app }}_{{ $index }} {{ $server.Value }}
 {{ end }}
     
 backend b_pub_query_{{ $app }}
-{{ range $index, $server := gets "/apps/{{ $app }}/apis/public/query" }}
+{{ range $index, $server := gets "/apps/{{ $app }}/actn/public/query" }}
     server srv_pub_query_{{ $app }}_{{ $index }} {{ $server.Value }}
 {{ end }}
 
 backend b_pub_upsert_{{ $app }}
-{{ range $index, $server := gets "/apps/{{ $app }}/apis/public/upsert" }}
+{{ range $index, $server := gets "/apps/{{ $app }}/actn/public/upsert" }}
     server srv_pub_upsert_{{ $app }}_{{ $index }} {{ $server.Value }}
 {{ end }}
 
 backend b_pub_delete_{{ $app }}
-{{ range $index, $server := gets "/apps/{{ $app }}/apis/public/delete" }}
+{{ range $index, $server := gets "/apps/{{ $app }}/actn/public/delete" }}
     server srv_pub_delete_{{ $app }}_{{ $index }} {{ $server.Value }}
 {{ end }}
     
 backend b_core_back_{{ $app }}
   reqrep ^([^\ :]*)\ /api/(.*) \1\ /\2
-{{ range $index, $server := gets "/apps/{{ $app }}/apis/core/backend" }}
+{{ range $index, $server := gets "/apps/{{ $app }}/actn/core/backend" }}
     server srv_core_back_{{ $app }}_{{ $index }} {{ $server.Value }}
 {{ end }}  
   
 backend b_core_front_{{ $app }}
-{{ range $index, $server := gets "/apps/{{ $app }}/apis/core/frontend" }}
+{{ range $index, $server := gets "/apps/{{ $app }}/actn/core/frontend" }}
     server srv_core_front_{{ $app }}_{{ $index }} {{ $server.Value }}
 {{ end }}  
     

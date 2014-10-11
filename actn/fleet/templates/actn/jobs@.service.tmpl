@@ -5,13 +5,13 @@ Description=Actn.io %p %i service
 Requires=etcd.service
 Requires=docker.service
 Requires=postgresql-discovery@__app__.service
-Requires=%p-discovery@%i.service
+#Requires=%p-discovery@%i.service
 
 # Dependency ordering
 After=etcd.service
 After=docker.service
 After=postgresql-discovery@__app__.service
-Before=%p-discovery@%i.service
+# Before=%p-discovery@%i.service
 
 [Service]
 TimeoutStartSec=0
@@ -20,12 +20,12 @@ EnvironmentFile=/etc/environment
 
 ExecStartPre=/usr/bin/docker pull valley/actn-api
 
-ExecStartPre=-/usr/bin/docker kill %p-%i
-ExecStartPre=-/usr/bin/docker rm %p-%i
+ExecStartPre=-/usr/bin/docker kill actn-%p-%i
+ExecStartPre=-/usr/bin/docker rm actn-%p-%i
 ExecStartPre=-/usr/bin/docker run --rm -e DATABASE_URL=__database_url__ valley/actn-api bundle exec rake db:migrate
 
-ExecStart=/usr/bin/docker run --name %p-%i -p ${COREOS_PRIVATE_IPV4}::9000 -e DATABASE_URL=__database_url__ valley/actn-api bundle exec rake jobs:work
+ExecStart=/usr/bin/docker run --name actn-%p-%i -e DATABASE_URL=__database_url__ valley/actn-api bundle exec rake jobs:work
 
-ExecStartPost=/bin/bash -c "while [[ -z $(docker ps | grep %p-%i) ]]; do echo 'waiting docker...'; sleep 1; done"
+ExecStop=/usr/bin/docker stop actn-%p-%i
 
-ExecStop=/usr/bin/docker stop %p-%i
+ExecStopPost=/home/core/actn/bin/actnctl docker:cleanup actn-%p-%i

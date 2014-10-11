@@ -20,12 +20,14 @@ EnvironmentFile=/etc/environment
 
 ExecStartPre=/usr/bin/docker pull valley/actn-api
 
-ExecStartPre=-/usr/bin/docker kill %p-%i
-ExecStartPre=-/usr/bin/docker rm %p-%i
+ExecStartPre=-/usr/bin/docker kill actn-%p-%i
+ExecStartPre=-/usr/bin/docker rm actn-%p-%i
 ExecStartPre=-/usr/bin/docker run --rm -e DATABASE_URL=__database_url__ valley/actn-api bundle exec rake db:migrate
 
-ExecStart=/usr/bin/docker run --name %p-%i -p ${COREOS_PRIVATE_IPV4}::9000 -e SECRET=__secret__ -e DATABASE_URL=__database_url__ valley/actn-api actn-api __api_path__ -sv -p 9000
+ExecStart=/usr/bin/docker run --name actn-%p-%i -p ${COREOS_PRIVATE_IPV4}::9000 -e SECRET=__secret__ -e DATABASE_URL=__database_url__ valley/actn-api actn-api __api_path__ -sv -p 9000
 
-ExecStartPost=/bin/bash -c "while [[ -z $(docker ps | grep %p-%i) ]]; do echo 'waiting docker...'; sleep 1; done"
+ExecStartPost=/bin/bash -c "while [[ -z $(docker ps | grep actn-%p-%i) ]]; do echo 'waiting docker...'; sleep 1; done"
 
-ExecStop=/usr/bin/docker stop %p-%i
+ExecStop=/usr/bin/docker stop actn-%p-%i
+
+ExecStopPost=/home/core/actn/bin/actnctl docker:cleanup actn-%p-%i

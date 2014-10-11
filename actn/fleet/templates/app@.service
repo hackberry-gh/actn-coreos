@@ -1,18 +1,16 @@
 [Unit]
-Description=Test service
+Description=Actn.op %p %i service
 After=etcd.service
 After=docker.service
 
-
 [Service]
-Type=oneshot
-PrivateTmp=true
 TimeoutStartSec=0
 KillMode=none
 EnvironmentFile=/etc/environment
 
 ExecStartPre=/home/core/actn/bin/actnctl apps:create %i
-ExecStart=/home/core/actn/bin/actnctl apps:start %i
+ExecStartPre=/home/core/actn/bin/actnctl apps:start %i
+ExecStart=/bin/bash -c "while true; do printf $(fleetctl list-units | grep %i); sleep 10; done"
 ExecStop=/home/core/actn/bin/actnctl apps:stop %i
 
 [X-Fleet]

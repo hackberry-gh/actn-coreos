@@ -18,7 +18,7 @@ EnvironmentFile=/etc/environment
 
 ExecStartPre=-/bin/sh -c "mkdir /home/core/postgresql-%i"
 ExecStartPre=-/usr/bin/docker kill postgresql-%i
-ExecStartPre=-/usr/bin/docker rm --force postgresql-%i
+ExecStartPre=-/usr/bin/docker rm postgresql-%i
 ExecStartPre=/usr/bin/docker pull valley/postgresql
 
 ExecStart=/usr/bin/docker run --name postgresql-%i -v /home/core/postgresql-%i:/var/lib/postgresql/9.3/main -w /var/lib/postgresql/9.3/main -p ${COREOS_PUBLIC_IPV4}::5432 -e PORT=5432 -e POSTGRESQL_USER=usr_%i -e POSTGRESQL_PASS=pass_%i -e POSTGRESQL_DB=db_%i valley/postgresql
@@ -26,6 +26,7 @@ ExecStartPost=/bin/bash -c "while [[ -z $(docker ps | grep postgresql-%i) ]]; do
 
 ExecStop=/usr/bin/docker stop postgresql-%i
 
+ExecStopPost=/home/core/actn/bin/actnctl docker:cleanup postgresql-%i
 
 [X-Fleet]
-X-Conflicts=postgresql@*.service
+Conflicts=postgresql@*.service
