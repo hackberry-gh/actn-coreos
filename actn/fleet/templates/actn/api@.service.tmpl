@@ -26,7 +26,7 @@ ExecStartPre=-/usr/bin/docker run --rm -e DATABASE_URL=__database_url__ valley/a
 
 ExecStart=/usr/bin/docker run --name actn-%p-%i -p ${COREOS_PRIVATE_IPV4}::9000 -e SECRET=__secret__ -e DATABASE_URL=__database_url__ valley/actn-api actn-api __api_path__ -sv -p 9000
 
-ExecStartPost=/bin/bash -c "while [[ -z $(docker ps | grep actn-%p-%i) ]]; do echo 'waiting docker...'; sleep 1; done"
+ExecStartPost=/bin/bash -c "[[ -z $(docker images | grep valley/actn-api) ]] || while [[ -z $(docker ps | grep actn-%p-%i) ]]; do echo 'waiting docker...'; sleep 1; done"
 
 ExecStop=/usr/bin/docker stop actn-%p-%i
 

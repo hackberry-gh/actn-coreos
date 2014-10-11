@@ -1,1 +1,0 @@
-{"nfs":{"core":{"id":"core","nfs":true,"mount_options":["nolock,vers=3,udp"],"guestpath":"/home/core/actn","hostpath":"/Users/onuruyar/Sites/actn.io/LIVE/core-os/actn","disabled":false,"type":"nfs","map_uid":501,"map_gid":20,"nfs_udp":true,"nfs_version":3,"uuid":"1536377639"}}}

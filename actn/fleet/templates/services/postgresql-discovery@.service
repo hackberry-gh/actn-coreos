@@ -19,4 +19,4 @@ ExecStart=/bin/sh -c "while true; do /usr/bin/etcdctl set /apps/%i/services/post
 ExecStop=/usr/bin/etcdctl rm /apps/%i/services/postgresql
 
 [X-Fleet]
-MachineOf=postgresql@%i.service
+X-ConditionMachineOf=postgresql@%i.service

@@ -9,11 +9,11 @@ CLOUD_CONFIG_PATH = File.join(File.dirname(__FILE__), "user-data")
 CONFIG = File.join(File.dirname(__FILE__), "config.rb")
 
 # Defaults for config options defined in CONFIG
-$num_instances = 3
+$num_instances = 1
 $update_channel = "alpha"
 $enable_serial_logging = false
 $vb_gui = false
-$vb_memory = 512
+$vb_memory = 1024
 $vb_cpus = 1
 
 # Attempt to apply the deprecated environment variable NUM_INSTANCES to
