@@ -19,17 +19,14 @@ KillMode=none
 
 # Get CoreOS environmental variables
 EnvironmentFile=/etc/environment
-
 # Pre-start and Start
-## Directives with "=-" are allowed to fail without consequence
-ExecStartPre=-/usr/bin/docker kill haproxy
-ExecStartPre=-/usr/bin/docker rm haproxy
-ExecStartPre=/usr/bin/docker pull valley/haproxy
-ExecStart=/usr/bin/docker run --name haproxy -p ${COREOS_PRIVATE_IPV4}:5000:5000 \
-valley/haproxy /usr/local/bin/confd-watch
+ExecStartPre=-/usr/bin/docker kill actn-haproxy
+ExecStartPre=-/usr/bin/docker rm actn-haproxy
+ExecStart=/bin/bash -c "/usr/bin/docker run --name actn-haproxy -e HOST_IP=$(cat /run/systemd/system/etcd.service.d/20-cloudinit.conf | grep ETCD_ADDR | sed 's/.*=//' | sed 's/:.*//') -p ${COREOS_PUBLIC_IPV4}:80:80 hackberry/actn-haproxy /usr/local/bin/confd-watch"
 
 # Stop
-ExecStop=/usr/bin/docker stop haproxy
+ExecStop=/usr/bin/docker stop actn-haproxy
+ExecStopPost=-/usr/bin/docker rm actn-haproxy
 
 [X-Fleet]
 X-Conflicts=haproxy.service

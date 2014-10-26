@@ -90,6 +90,7 @@ Vagrant.configure("2") do |config|
 
       # Uncomment below to enable NFS for sharing the host machine into the coreos-vagrant VM.
       config.vm.synced_folder "./actn", "/home/core/actn", id: "core", :nfs => true, :mount_options => ['nolock,vers=3,udp']
+      config.vm.synced_folder "../../api", "/home/core/actn/docker/api", id: "core2", :nfs => true, :mount_options => ['nolock,vers=3,udp']      
 
       if File.exist?(CLOUD_CONFIG_PATH)
         config.vm.provision :file, :source => "#{CLOUD_CONFIG_PATH}", :destination => "/tmp/vagrantfile-user-data"

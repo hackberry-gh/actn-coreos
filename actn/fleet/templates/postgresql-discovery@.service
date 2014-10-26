@@ -1,0 +1,23 @@
+[Unit]
+Description=Actn.io postgresql %i service discovery
+
+# Requirements
+Requires=etcd.service
+Requires=docker.service
+Requires=postgresql@%i.service
+
+# Dependency ordering and binding
+After=etcd.service
+After=docker.service
+After=postgresql@%i.service
+BindsTo=postgresql@%i.service
+
+[Service]
+EnvironmentFile=/etc/environment
+  
+ExecStart=/bin/sh -c "while true; do /usr/bin/etcdctl set /apps/%i/addons/postgresql postgres://usr_%i:$(echo %i | md5sum -- | cut -d ' ' -f 1 | base64)@$(docker port $(docker ps | grep postgresql-%i | awk '{print $1}') 5432)/db_%i --ttl 90; sleep 45; done"
+ExecStop=/usr/bin/etcdctl rm /apps/%i/addons/postgresql
+
+[X-Fleet]
+X-ConditionMachineOf=postgresql@%i.service
+X-Conflicts=%p@%i.service

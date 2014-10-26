@@ -1,2 +1,0 @@
-load "actn/db/tasks/db.rake"
-load "actn/jobs/tasks/jobs.rake"

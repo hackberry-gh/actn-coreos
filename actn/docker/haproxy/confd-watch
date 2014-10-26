@@ -10,8 +10,8 @@ echo "[haproxy] booting container. ETCD: $ETCD."
 
 # Try to make initial configuration every 5 seconds until successful
 until confd -onetime -node $ETCD -config-file /etc/confd/conf.d/haproxy.toml; do
-    echo "[haproxy] waiting for confd to create initial haproxy configuration."
-    sleep 5
+  echo "[haproxy] waiting for confd to create initial haproxy configuration."
+  sleep 5
 done
 
 # Put a continual polling `confd` process into the background to watch
@@ -19,9 +19,19 @@ done
 confd -interval 10 -node $ETCD -config-file /etc/confd/conf.d/haproxy.toml &
 echo "[haproxy] confd is now monitoring etcd for changes..."
 
+
 # Start the Nginx service using the generated config
 echo "[haproxy] starting haproxy service..."
-service haproxy start
+if [[ $(/usr/sbin/service haproxy status) == *'haproxy is running.'* ]]; then
+/usr/sbin/service haproxy restart
+else
+/usr/sbin/service haproxy start
+fi  
 
 # Follow the logs to allow the script to continue running
-tail -f /var/log/haproxy/*.log
+# tail -f /var/log/haproxy.log
+
+while true
+do
+  sleep 5
+done

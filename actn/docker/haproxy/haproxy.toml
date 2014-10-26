@@ -5,7 +5,7 @@
 src = "haproxy.tmpl"
 
 # The location to place the rendered configuration file
-dest = "/etc/haproxy/haproxy.conf"
+dest = "/etc/haproxy/haproxy.cfg"
 
 # The etcd keys or directory to watch.  This is where the information to fill in
 # the template will come from.

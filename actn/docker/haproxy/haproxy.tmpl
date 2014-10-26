@@ -1,88 +1,126 @@
 global
-    pidfile /var/run/haproxy-id.pid
-    user    root
-    maxconn 2048
+	log 127.0.0.1 local0
+  maxconn 4096
+  user haproxy
+  group haproxy
     
 defaults
-    mode http
+  log global
+  mode http
 
-    timeout     connect     5000ms
-    timeout     client      30000ms
-    timeout     server      30000ms    
-    
-    stats       enable
-    stats       auth          admin:password
-    stats       uri           /monitor
-    stats       refresh       5s
-    retries     5
-    
-    option      httpchk       GET /status
-    option      redispatch
-    option      httpclose
-    option      abortonclose
-    option      forwardfor
-    option      http-server-close    
-    
-    balance     roundrobin
+  timeout     connect         5s
+  timeout     client          30s
+  timeout     server          30s    
+  timeout 		http-keep-alive 1s
+  timeout 		http-request    15s
+  timeout 		queue           30s
+  timeout 		tarpit          60s    
+  
+  stats       enable
+  stats       auth          admin:password
+  stats       uri           /monitor
+  stats       refresh       5s
+  retries     5
+  
+  option      httpchk       GET /status
+  option      redispatch
+  option      httpclose
+  option      abortonclose
+  option      forwardfor
+  option      http-server-close    
+  option 			httplog
+  option 			dontlognull		
+  
+  balance     roundrobin
       
 frontend actn-api
     
-    bind :5000
+    bind *:80
     
     monitor-uri         /haproxy
-        
 
-    acl a_pub_connect_path    path              /connect
-    acl a_pub_query_method    method            GET HEAD OPTIONS
-    acl a_pub_upsert_method   method            POST PUT PATCH
-    acl a_pub_delete_method   method            DELETE
+    ##
+    # CORE
     
-    acl a_core_api_path       path_beg           /api
+    ## routing based on websocket protocol header
+    acl hdr_connection_upgrade hdr(Connection)  -i upgrade
+    acl hdr_upgrade_websocket  hdr(Upgrade)     -i websocket
     
+    acl a_core_api_path        path_beg         /api
+    
+    ##
+    # CORS
+    
+    acl a_cors_connect_path    path              /connect
+    acl a_cors_query_method    method            GET HEAD OPTIONS
+    acl a_cors_upsert_method   method            POST PUT PATCH
+    acl a_cors_delete_method   method            DELETE
+    
+      
 {{range $app := lsdir "/apps" }}
-    
-    acl a_pub_host_{{ $app }}    hdr_beg(host)     -i api.{{ $app }}.
-    
-    acl a_core_host_{{ $app }}   hdr_beg(host)      -i core.{{ $app }}.
-    
-    use_backend b_pub_connect_{{ $app }} if  a_pub_connect_path   a_pub_host_{{ $app }}
-    use_backend b_pub_query_{{ $app }}   if  a_pub_query_method   a_pub_host_{{ $app }}
-    use_backend b_pub_upsert_{{ $app }}  if  a_pub_upsert_method  a_pub_host_{{ $app }}
-    use_backend b_pub_delete_{{ $app }}  if  a_pub_delete_method  a_pub_host_{{ $app }}
 
-    use_backend b_core_back_{{ $app }}   if  a_core_api_path  a_core_host_{{ $app }}
-    use_backend b_core_front_{{ $app }}  if  a_core_host_{{ $app }}
+  ## CORE    
+  acl a_core_host_{{ $app }}           hdr_beg(host)      -i {{ $app }}.core.actn.
 
+  use_backend b_core_live_{{ $app }}   if  hdr_connection_upgrade hdr_upgrade_websocket a_core_host_{{ $app }}
+  use_backend b_core_back_{{ $app }}   if  a_core_api_path  a_core_host_{{ $app }}    
+  use_backend b_core_front_{{ $app }}  if  a_core_host_{{ $app }} 
 
-backend b_pub_connect_{{ $app }}
-{{ range $index, $server := gets "/apps/{{ $app }}/actn/public/connect" }}
-    server srv_pub_connect_{{ $app }}_{{ $index }} {{ $server.Value }}
+  ## CORS
+  acl a_cors_host_{{ $app }}            hdr_beg(host)     -i {{ $app }}.api.actn.
+  
+  use_backend b_cors_connect_{{ $app }} if  a_cors_connect_path   a_cors_host_{{ $app }}
+  use_backend b_cors_query_{{ $app }}   if  a_cors_query_method   a_cors_host_{{ $app }}
+  use_backend b_cors_upsert_{{ $app }}  if  a_cors_upsert_method  a_cors_host_{{ $app }}
+  use_backend b_cors_delete_{{ $app }}  if  a_cors_delete_method  a_cors_host_{{ $app }}
+  
+  ## UI
+  acl a_ui_host_{{ $app }}            hdr_beg(host)     -i {{ $app }}.actn.
+  
+  use_backend b_ui_render_{{ $app }} if a_ui_host_{{ $app }}
+
+## backends
+
+backend b_cors_connect_{{ $app }}
+{{$dir := printf "/apps/%s/apis/cors/connect/*" $app }}{{ range $index, $server := gets $dir }}
+    server srv_cors_connect_{{ $app }}_{{ $index }} {{ $server.Value }}
 {{ end }}
     
-backend b_pub_query_{{ $app }}
-{{ range $index, $server := gets "/apps/{{ $app }}/actn/public/query" }}
-    server srv_pub_query_{{ $app }}_{{ $index }} {{ $server.Value }}
+backend b_cors_query_{{ $app }}
+{{$dir := printf "/apps/%s/apis/cors/query/*" $app }}{{ range $index, $server := gets $dir }}
+    server srv_cors_query_{{ $app }}_{{ $index }} {{ $server.Value }}
 {{ end }}
 
-backend b_pub_upsert_{{ $app }}
-{{ range $index, $server := gets "/apps/{{ $app }}/actn/public/upsert" }}
-    server srv_pub_upsert_{{ $app }}_{{ $index }} {{ $server.Value }}
+backend b_cors_upsert_{{ $app }}
+{{$dir := printf "/apps/%s/apis/cors/upsert/*" $app }}{{ range $index, $server := gets $dir }}
+    server srv_cors_upsert_{{ $app }}_{{ $index }} {{ $server.Value }}
 {{ end }}
 
-backend b_pub_delete_{{ $app }}
-{{ range $index, $server := gets "/apps/{{ $app }}/actn/public/delete" }}
-    server srv_pub_delete_{{ $app }}_{{ $index }} {{ $server.Value }}
+backend b_cors_delete_{{ $app }}
+{{$dir := printf "/apps/%s/apis/cors/delete/*" $app }}{{ range $index, $server := gets $dir }}
+    server srv_cors_delete_{{ $app }}_{{ $index }} {{ $server.Value }}
 {{ end }}
     
 backend b_core_back_{{ $app }}
   reqrep ^([^\ :]*)\ /api/(.*) \1\ /\2
-{{ range $index, $server := gets "/apps/{{ $app }}/actn/core/backend" }}
-    server srv_core_back_{{ $app }}_{{ $index }} {{ $server.Value }}
-{{ end }}  
+{{$dir := printf "/apps/%s/apis/core/backend/*" $app }}{{ range $index, $server := gets $dir }}
+    server srv_core_backend_{{ $app }}_{{ $index }} {{ $server.Value }}
+{{ end }}
   
 backend b_core_front_{{ $app }}
-{{ range $index, $server := gets "/apps/{{ $app }}/actn/core/frontend" }}
-    server srv_core_front_{{ $app }}_{{ $index }} {{ $server.Value }}
-{{ end }}  
+{{$dir := printf "/apps/%s/apis/core/frontend/*" $app }}{{ range $index, $server := gets $dir }}
+    server srv_core_frontend_{{ $app }}_{{ $index }} {{ $server.Value }}
+{{ end }}
+
+backend b_core_live_{{ $app }}
+  timeout server 86400s
+{{$dir := printf "/apps/%s/apis/core/live/*" $app }}{{ range $index, $server := gets $dir }}
+    server srv_core_live_{{ $app }}_{{ $index }} {{ $server.Value }}
+{{ end }}
+
+backend b_ui_render_{{ $app }}
+{{$dir := printf "/apps/%s/apis/ui/render/*" $app }}{{ range $index, $server := gets $dir }}
+    server srv_ui_render_{{ $app }}_{{ $index }} {{ $server.Value }}
+{{ end }}
     
 {{end}}

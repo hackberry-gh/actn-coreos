@@ -3,306 +3,323 @@
 set -eo pipefail
 # set -x
 
-ROOT="/home/core/actn"
-TEMPLATE_DIR="$ROOT/fleet/templates"
-INSTANCE_DIR="$ROOT/fleet/instances"
-declare -a APIS=(public-connect public-upsert public-query public-delete core-frontend core-backend jobs)
+export ROOT=${ROOT:="/home/core/actn"}
+export FLEET_DIR=${FLEET_DIR:="$ROOT/fleet"}
+export TMPL_DIR=${TMPL_DIR:="$ROOT/fleet/templates"}
+export DOCKER_DIR=${DOCKER_DIR:="$ROOT/docker"}
+
+declare -a APIS=(cors/connect cors/upsert cors/query cors/delete cors/jobs core/frontend core/backend core/live core/notify ui/render)
+
 ##
-# Helpers
+# Docker Helpers
 
 function docker_cleanup {
-  docker ps -a | grep $1 | grep Exited | awk '{print $1}' | xargs docker rm &> /dev/null &
+  if [[ -d $2 ]]; then
+    docker ps -a | grep $1 | grep Exited | awk '{print $1}' | xargs docker rm -f -v 2> /dev/null
+  else
+    docker ps -a | grep $1 | awk '{print $1}' | xargs docker rm -f -v 2> /dev/null
+  fi
+  true
 }
-# function etcd_cleanup {
-#   if [[ ! -z $1 ]]; then
-#     etcdctl rm "/apps/$1" --recursive &2> /dev/null &
-#   fi
-#   true
-# }
+
+##
+# Fleetctl Helpers
 
 function safe_rm {
-  rm $1 2> /dev/null &
+  rm $@ -rf 2> /dev/null &
   true
 }
 
+function render_template() {
+  # eval "echo \"$(cat $1)\""
+  filename=$2
+  cp $1 $filename
 
-##
-# Common services, postgresql, memcached, etc
-
-function services_init {
-  
-  # fleetctl destroy "$2@$1.service" "$2-discovery@$1.service"
-  
-  if [[ $(fleetctl list-unit-files | grep $2@.service | wc -l) -eq 0 ]]; then
-    echo "[actnctl] Submitting service: $2"
-    fleetctl submit "$TEMPLATE_DIR/services/$2@.service" "$TEMPLATE_DIR/services/$2-discovery@.service"
-  fi
-  
-  if [[ $(fleetctl list-unit-files | grep $2@$1.service | wc -l) -eq 0 ]]; then
-    echo "[actnctl] Loading service: $2@$1"     
-    fleetctl load "$2@$1.service" "$2-discovery@$1.service"
-  fi
-  
-  services_start $1 $2
-  
-  # if [[ $(fleetctl list-units | grep $2@$1.service | grep running | wc -l) -eq 0 ]]; then
-  # echo "[actnctl] Starting service: $2@$1"
-  # fleetctl start "$2@$1.service"
-  # service_wait "/apps/$1/services/$2"
-  # fi
-}
-
-function service_wait {
-  while [[ -z $(etcdctl get $1 2> /dev/null) ]]; do echo "Waiting service: $1"; sleep 1; done    
+  sed "s#\$app#$app#gi" $filename > $filename.o
+  sed "s#\$api#$api#gi" $filename.o > $filename
+  sed "s#\$endpoint#$endpoint#gi" $filename > $filename.o
+  sed "s#\$secret#$secret#gi" $filename.o > $filename  
+  #mv $filename.o $filename
+  safe_rm $filename.o
   true
 }
 
-function services_start {
-  echo "[actnctl] Starting service: $2@$1"    
-  fleetctl start "$2@$1.service"
-  service_wait "/apps/$1/services/$2"
-  echo "[actnctl] Service started: $2@$1"    
-}
-
-function services_stop {
-  echo "[actnctl] Stopping service: $2@$1"  
-  fleetctl stop "$2@$1.service"
-  # fleetctl unload "$2@$1.service"
-  # docker_cleanup "$2-$1"
-  echo "[actnctl] Service stopped: $2@$1"    
-}
-
-function services_destroy {
-  echo "[actnctl] Destroying service: $2@$1"  
-  # $(fleetctl stop "$2@$1.service" 2> /dev/null &)
-#   $(fleetctl stop "$2-discovery@$1.service" 2> /dev/null &)
-
-  # fleetctl unload "$2@$1.service"
-  # fleetctl unload "$2-discovery@$1.service"
-
-  fleetctl destroy "$2@$1.service" 
-  fleetctl destroy "$2-discovery@$1.service"    
-  
-  fleetctl destroy "$2@.service" 
-  fleetctl destroy "$2-discovery@.service"      
-  
-  docker_cleanup "$2-$1" 2> /dev/null &
-  echo "[actnctl] Service destroyed: $2@$1"  
-}
-
-
-##
-# Actn.io API service helpers
-
-function apis_init {
+function secretbase {
   app=$1
-  api=$2
-  i=$3
-  service="$api@$app-$i.service"
-  filename="$INSTANCE_DIR/$service"
-
-  database_url=$(etcdctl get /apps/$app/services/postgresql)
-  secret=$(echo $app | md5sum -- | cut -d ' ' -f 1 | base64)    
-  
-  if [[ $api == *jobs* ]]; then 
-    template="jobs"; 
+  if [[ -z $(etcdctl get /apps/$app/secret 2> /dev/null) ]]; then
+    secret=$(echo $app | md5sum -- | cut -d ' ' -f 1 | base64)
+    etcdctl set /apps/$app/secret $secret
   else
-    template="api"
+    secret=$(etcdctl get /apps/$app/secret)
   fi
-    
-  if [[ $api == *discovery* ]]; then 
-    template="$template-discovery"; 
-    api=$(echo $api | sed 's/-discovery//')
-  fi
-  api_path=$(echo $api | sed 's/-/\//')  
-
-  cp "$TEMPLATE_DIR/actn/$template@.service.tmpl" $filename
-  
-  sed "s#__app__#$app#gi" $filename > $filename.o        
-  sed "s#__secret__#$secret#gi" $filename.o > $filename
-  sed "s#__database_url__#$database_url#gi" $filename > $filename.o
-  sed "s#__api_path__#$api_path#gi" $filename.o > $filename
-  sed "s#__api__#$api#gi" $filename > $filename.o
-  mv $filename.o $filename
-  
-  #fleetctl destroy $service
-  
-  fleetctl submit $filename 
-  
-  fleetctl load $service
-  
-  safe_rm $filename
 }
 
-function apis_scale {
-  app=$1
-  api=$2
-  api_path=$(echo $api | sed 's/-/\//')
-  target=$3
-  running=$(echo $(fleetctl list-units | grep $api@$app | grep running | wc -l))
-    
-  if [[ $target -lt $running ]]; then
-    echo "SCALE DOWN $target $running"    
-    while [[ $target -lt $running ]]
-    do
-      unit="$api@$app-$running"
-      fleetctl stop $unit
-      fleetctl stop $(echo $unit | sed 's#@#-discovery@#')
-      running=$(($running-1))      
-    done  
+function load_api {
+  api=$1
+  endpoint=$(basename $api)
+  api=$(dirname $api)
+  secret=$(secretbase $app)
+  index=$2
+  template="$TMPL_DIR/api@.service.tmpl"
+  service="$TMPL_DIR/$api-$endpoint@$app-$index.service"
+  
+  if [[ $endpoint == *jobs* ]] || [[ $endpoint == *notify* ]]; then
+    template="$TMPL_DIR/$endpoint@.service.tmpl";
+    render_template $template $service
+    fleetctl destroy $service
+    fleetctl submit $service
+    fleetctl load $(basename $service)
+    safe_rm $service
   else
-    echo "SCALE UP $target $running"    
-    while [[ $target -gt $running ]]
-    do
-      running=$(($running+1))
-      apis_init $app $api $running
-      if [[ ! $api == *jobs* ]]; then 
-        apis_init $app $api-discovery $running    
-      fi
-      fleetctl start "$api@$app-$running.service"     
-      # service_wait "/apps/$app/actn/$api_path/$app-$running"   
-    done      
+    discovery_service="$TMPL_DIR/$api-$endpoint-discovery@$app-$index.service"
+    render_template $template $service
+    render_template "$TMPL_DIR/api-discovery@.service.tmpl" $discovery_service
+    fleetctl destroy $service $discovery_service
+    fleetctl submit $service $discovery_service
+    fleetctl load $service $discovery_service
+    safe_rm $service $discovery_service
   fi
 }
 
-function apis_destroy {
-  app=$1
-  api=$2
-  
-  while [[ $(fleetctl list-units | grep $api@$app | wc -l) -gt 0 ]]
-  do
-    for unit in $(fleetctl list-units | grep $api@$app | awk '{ print $1 }')
-    do
-      fleetctl destroy $unit
-      fleetctl destroy $(echo $unit | sed 's#@#-discovery@#')
-    done
-  done  
-}
-
-##
-# Apps
-
-function apps_scale {
-  app=$1
-  scale="$2"
-  for api in ${APIS[@]}
-  do
-    scale=${scale:=$(fleetctl list-unit-files | grep $api@$app | wc -l)}
-    #scale=${scale:=1}
-    echo "[actnctl] App Scale: $scale"
-    apis_scale $app $api $scale
-  done
-}
-
-function apps_destroy {
-  app=$1
-  for api in ${APIS[@]}
-  do
-    apis_destroy $app $api
-  done
-  
-  services_destroy $app "postgresql"
-  fleetctl destroy "app@$app.service"  
-  
-  docker_cleanup $app 2> /dev/null &
-  # etcd_cleanup $app
+function wait_service {
+  while [[ $(docker ps | grep $1 | grep $2 | wc -l) -eq 0 ]]; do echo "Waiting docker: $1 $2"; sleep 1; done      
+  while [[ -z "$(etcdctl get "/apps/$1/$3" 2> /dev/null)" ]]; do echo "Waiting service: /apps/$1/$3"; sleep 1; done    
+  echo "$(etcdctl get /apps/$1/$3)"
+  true
 }
 
 case "$1" in
   
-  ##
-  # Services
-  
-  services:init)
-  services_init $2 $3
-  ;;
-  
-  services:start)
-  services_start $2 $3
-  ;;
-  
-  services:stop)
-  services_stop $2 $3
-  ;;
-  
-  services:destroy)
-  services_destroy $2 $3
-  ;;
-  
-  ##
-  # Apis
-  apis:restart)
-  for api in $(fleetctl list-units | grep "$3@$2" | awk '{print $1}')
-  do
-    fleetctl stop $api
-    fleetctl start $api    
-  done
-  ;;
-  
+  fleet:destroy_all)
+    fleetctl list-units --no-legend | awk '{print $1}' | xargs fleetctl destroy
+    fleetctl list-unit-files --no-legend | awk '{print $1}' | xargs fleetctl destroy
     
-  apis:scale)
-  apis_scale $2 $3 $4
+    for app in $(etcdctl ls /apps); do
+      # docker_cleanup $app true
+      # etcdctl rm $app --recursive 2> /dev/null
+      $0 apps:destroy $app
+    done 
   ;;
   
-  apis:destroy)
-  apis_destroy $2 $3
-  ;;  
+  apis:load)
+    app=$2
+    api=$3  
+    index=$4
+    if [[ -z $app ]] || [[ -z $api ]]; then
+      echo "Missing Parameters"
+      exit -1
+    else
+      load_api $api $index
+    fi
+  ;; 
   
-  ##
-  # Apps
+  apis:start)
+    app=$2
+    api=$3      
+    if [[ -z $app ]] || [[ -z $api ]]; then
+      echo "Missing Parameters"
+      exit -1
+    else
+      for unit in $(fleetctl list-units | grep $app | grep $api | grep -v 'running\|discovery' | awk '{print $1}'); do
+        fleetctl start $unit
+      done
+    fi
+  ;; 
   
-  apps:create)
-  services_init $2 "postgresql"
-  apps_scale $2 1
-  ;;
+  apis:stop)
+    app=$2
+    api=$3      
+    if [[ -z $app ]] || [[ -z $api ]]; then
+      echo "Missing Parameters"
+      exit -1
+    else
+      for unit in $(fleetctl list-units | grep $app | grep $api | grep -v 'discovery' | awk '{print $1}'); do
+        fleetctl stop $unit
+      done
+    fi
+  ;; 
+  
+  apis:restart)
+    app=$2
+    api=$3      
+    if [[ -z $app ]] || [[ -z $api ]]; then
+      echo "Missing Parameters"
+      exit -1
+    else
+      $0 apis:stop $app $api
+      $0 apis:start $app $api
+    fi
+  ;; 
+  
+  apps:load)
+    app=$2
+    
+    if [[ -z $app ]]; then
+      echo "Missing Parameters"
+      exit -1
+    else
+      
+      # submit postgres service
+      fleetctl submit $TMPL_DIR/postgresql@.service $TMPL_DIR/postgresql-discovery@.service
+      fleetctl load postgresql@$app.service postgresql-discovery@$app.service
+    
+      for api in ${APIS[@]}
+      do
+        load_api $api 1
+      done
+    
+    fi
+    
+  ;; 
   
   apps:start)
-  services_start $2 "postgresql"
-  apps_scale $2
+    app=$2
+    
+    if [[ -z $app ]]; then
+      echo "Missing Parameters"
+      exit -1
+    else    
+      fleetctl start "postgresql@$app.service"
+    
+      wait_service $app "postgresql" "addons/postgresql" 
+      
+      # Ensure postgres config is set
+      etcdctl set /apps/$app/addons/postgresql postgres://usr_$app:$(echo $app | md5sum -- | cut -d ' ' -f 1 | base64)@$(docker port $(docker ps | grep postgresql-$app | awk '{print $1}') 5432)/db_$app
+      echo "Postgres set to: $(etcdctl get /apps/$app/addons/postgresql)"
+      
+      $0 apps:run $app rake db:migrate &> /dev/null || true
+    
+      for unit in $(fleetctl list-units | grep $app | grep -v 'running\|discovery' | awk '{print $1}'); do
+        if [[ "$unit" == *notify* ]]; then
+          wait_service $app "core-live" "apis/core/live/$app-1"
+          fleetctl start $unit          
+        else
+          fleetctl start $unit
+        fi
+      done
+      
+      # notify api always failing on first try :( , so make it running
+      for unit in $(fleetctl list-units | grep $app | grep failed | grep -v 'discovery' | awk '{print $1}'); do
+        fleetctl stop $unit
+        fleetctl start $unit      
+      done
+    fi
   ;;
-  
+
   apps:stop)
-  apps_scale $2 0
-  services_stop $2 "postgresql"
+    app=$2
+    if [[ -z $app ]]; then
+      echo "Missing Parameters"
+      exit -1
+    else
+      for unit in $(fleetctl list-units | grep $app | grep -v 'discovery' | awk '{print $1}'); do
+        fleetctl stop $unit
+      done
+    fi
   ;;
   
-  apps:destroy)
-  apps_destroy $2
+  apps:restart)
+    app=$2
+    if [[ -z $app ]]; then
+      echo "Missing Parameters"
+      exit -1
+    else
+      $0 apps:stop $app
+      $0 apps:start $app
+    fi
   ;;
   
   apps:scale)
-  apps_scale $2 $3
+    app=$2
+    target=$3
+    if [[ -z $app ]] || [[ -z $target ]]; then
+      echo "Missing Parameters"
+      exit -1
+    else
+      for api in ${APIS[@]}; do
+        
+        service="$(dirname $api)-$(basename $api)@$app"
+        running=$(echo $(fleetctl list-units | grep $service | grep -v 'discovery' | grep running | wc -l))
+        
+        if [[ $target -lt $running ]]; then
+          
+          echo "SCALE DOWN $target $running"    
+          while [[ $target -lt $running ]]; do
+            unit="$service-$running"
+            fleetctl destroy $unit
+            fleetctl destroy $(echo $unit | sed 's#@#-discovery@#')
+            # fleetctl stop $(echo $unit | sed 's#@#-discovery@#')
+            running=$(($running-1))      
+          done  
+          
+        else
+          echo "SCALE UP $target $running"    
+          
+          while [[ $target -gt $running ]]; do
+            running=$(($running+1))
+      
+            if [[ $api == *notify* ]]; then 
+              if [[ $running -eq 1 ]]; then
+                load_api $api $running
+                fleetctl start "$service"
+              fi
+            else
+              load_api $api $running        
+              fleetctl start "$service"
+            fi
+            
+            
+          done
+        fi
+      done
+    fi
   ;;
   
-  ##
-  # Fleet
+  apps:run)
+    app=$2
+    if [[ $(fleetctl list-units | grep $app | wc -l) -eq 0 ]]; then
+      echo "Missing Parameters"
+      exit -1
+    else
+      database_url=$(etcdctl get /apps/$app/addons/postgresql)
+      shift 2
+      docker run --rm -it -e DATABASE_URL=$database_url hackberry/actn-core $@
+    fi
+  ;;
   
-  create)
-    fleetctl submit "$TEMPLATE_DIR/app@$2.service"
-    fleetctl load "app@$2.service"
-    fleetctl start "app@$2.service"
+  apps:destroy)
+    app=$2
+    if [[ -z $app ]]; then
+      echo "Missing Parameters"
+      exit -1
+    else
+      fleetctl list-units --no-legend | grep $app | awk '{print $1}' | xargs fleetctl destroy || true
+      fleetctl list-unit-files --no-legend | grep $app | awk '{print $1}' | xargs fleetctl destroy || true
+      sleep 2
+      $(etcdctl rm /apps/$app --recursive 2> /dev/null) || true
+      docker_cleanup $app true
+    fi
+  ;;
+  
+  logs)
+    app=$2
+    {
+    for service in $(fleetctl list-units | grep $app | grep -v 'discovery' | grep running)
+    do
+      fleetctl journal -f $service &
+    done
+    } > /tmp/$app.log
+    tail -f /tmp/$app.log
+  ;;
+  
+  haproxy:reset)
+    fleetctl destroy haproxy.service 
+    fleetctl submit "$FLEET_DIR/static/haproxy.service"
+    fleetctl load haproxy.service
+    fleetctl start haproxy.service
   ;;
 
-  start)
-    fleetctl start "app@$2.service"
-  ;;  
-    
-  stop)
-    fleetctl stop "app@$2.service"
-  ;;  
   
-  destroy)
-    fleetctl destroy "app@$2.service"
-    apps_destroy $2
-  ;;
-  
-  docker:cleanup)
-    docker_cleanup $2 2> /dev/null &
-  ;;
-  
-  destroy_all)
-  fleetctl list-units | grep postgres | awk '{print $1}' | xargs fleetctl destroy
-  fleetctl list-unit-files | grep postgres | awk '{print $1}' | xargs fleetctl destroy    
-  ;;
-    
 esac
+
+# echo "[actnctl] $@ finished"

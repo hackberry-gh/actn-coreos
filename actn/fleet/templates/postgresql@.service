@@ -1,0 +1,29 @@
+[Unit]
+Description=Actn.io %p %i service
+
+# Requirements
+Requires=etcd.service
+Requires=docker.service
+Requires=%p-discovery@%i.service
+
+# Dependency ordering
+After=etcd.service
+After=docker.service
+Before=%p-discovery@%i.service
+
+[Service]
+TimeoutStartSec=0
+KillMode=none
+EnvironmentFile=/etc/environment
+Restart=on-failure
+
+ExecStartPre=-/bin/sh -c "mkdir /home/core/%p-%i"
+ExecStartPre=-/usr/bin/docker kill %p-%i
+ExecStartPre=-/usr/bin/docker rm -f %p-%i
+ExecStartPre=/usr/bin/docker pull valley/postgresql
+
+ExecStart=/bin/sh -c "docker run --name %p-%i -v /home/core/%p-%i:/var/lib/postgresql -p ${COREOS_PUBLIC_IPV4}::5432 -e PORT=5432 -e POSTGRESQL_USER=usr_%i -e POSTGRESQL_PASS=$(echo %i | md5sum -- | cut -d ' ' -f 1 | base64) -e POSTGRESQL_DB=db_%i valley/postgresql"
+ExecStop=/usr/bin/docker stop %p-%i
+
+[X-Fleet]
+X-Conflicts=%p@%i.service

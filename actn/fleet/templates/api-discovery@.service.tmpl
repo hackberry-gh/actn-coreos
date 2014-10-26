@@ -1,0 +1,27 @@
+[Unit]
+Description=Actn.io %p %i service discovery
+
+# Requirements
+Requires=etcd.service
+Requires=docker.service
+Requires=$api-$endpoint@%i.service
+
+# Dependency ordering and binding
+After=etcd.service
+After=docker.service
+After=$api-$endpoint@%i.service
+BindsTo=$api-$endpoint@%i.service
+Before=%p-notify@%i.service
+
+
+[Service]
+RestartSec=60
+EnvironmentFile=/etc/environment
+ExecStart=/bin/sh -c "while true; do etcdctl set /apps/$app/apis/$api/$endpoint/%i $(docker port $(docker ps | grep $api-$endpoint-%i | awk '{print $1}') 9000) --ttl 60; sleep 45; done"
+ExecStop=/usr/bin/etcdctl rm /apps/$app/apis/$api/$endpoint/%i
+
+[Install]
+WantedBy=app@$app.target
+
+[X-Fleet]
+X-ConditionMachineOf=$api-$endpoint@%i.service
