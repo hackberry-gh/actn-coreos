@@ -17,7 +17,7 @@ TimeoutStartSec=0
 KillMode=none
 EnvironmentFile=/etc/environment
 
-# ExecStartPre=/usr/bin/docker pull hackberry/actn-$api
+ExecStartPre=/usr/bin/docker pull hackberry/actn-$api
 
 ExecStartPre=-/usr/bin/docker kill %p-%i
 ExecStartPre=-/usr/bin/docker rm %p-%i
