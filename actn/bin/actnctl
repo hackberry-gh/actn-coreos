@@ -40,8 +40,10 @@ function render_template() {
   sed "s#\$endpoint#$endpoint#gi" $filename > $filename.o
   sed "s#\$secret#$secret#gi" $filename.o > $filename  
   #mv $filename.o $filename
+  targetname="$FLEET_DIR/instances/$(basename $filename)"
+  mv $filename $targetname
   safe_rm $filename.o
-  true
+  echo "$targetname"
 }
 
 function secretbase {
@@ -65,25 +67,25 @@ function load_api {
   
   if [[ $endpoint == *jobs* ]] || [[ $endpoint == *notify* ]]; then
     template="$TMPL_DIR/$endpoint@.service.tmpl";
-    render_template $template $service
-    fleetctl destroy $service
+    service=$(render_template $template $service)
+    fleetctl destroy $(basename $service)
     fleetctl submit $service
     fleetctl load $(basename $service)
-    safe_rm $service
+    # safe_rm $service
   else
     discovery_service="$TMPL_DIR/$api-$endpoint-discovery@$app-$index.service"
-    render_template $template $service
-    render_template "$TMPL_DIR/api-discovery@.service.tmpl" $discovery_service
-    fleetctl destroy $service $discovery_service
+    service=$(render_template $template $service)
+    discovery_service=$(render_template "$TMPL_DIR/api-discovery@.service.tmpl" $discovery_service)
+    fleetctl destroy $(basename $service) $(basename $discovery_service)
     fleetctl submit $service $discovery_service
-    fleetctl load $service $discovery_service
-    safe_rm $service $discovery_service
+    fleetctl load $(basename $service) $(basename $discovery_service)
+    # safe_rm $service $discovery_service
   fi
 }
 
 function wait_service {
-  while [[ $(docker ps | grep $1 | grep $2 | wc -l) -eq 0 ]]; do echo "Waiting docker: $1 $2"; sleep 1; done      
-  while [[ -z "$(etcdctl get "/apps/$1/$3" 2> /dev/null)" ]]; do echo "Waiting service: /apps/$1/$3"; sleep 1; done    
+  # while [[ $(docker ps | grep $1 | grep $2 | wc -l) -eq 0 ]]; do echo "Waiting docker: $1 $2"; sleep 1; done
+  while [[ -z "$(etcdctl get "/apps/$1/$3" 2> /dev/null)" ]]; do echo "Waiting service: /apps/$1/$3"; sleep 1; done
   echo "$(etcdctl get /apps/$1/$3)"
   true
 }
@@ -121,6 +123,7 @@ case "$1" in
       exit -1
     else
       for unit in $(fleetctl list-units | grep $app | grep $api | grep -v 'running\|discovery' | awk '{print $1}'); do
+        echo "apis:start --> $unit"
         fleetctl start $unit
       done
     fi
@@ -134,6 +137,7 @@ case "$1" in
       exit -1
     else
       for unit in $(fleetctl list-units | grep $app | grep $api | grep -v 'discovery' | awk '{print $1}'); do
+        echo "apis:stop --> $unit"        
         fleetctl stop $unit
       done
     fi
@@ -179,30 +183,40 @@ case "$1" in
       echo "Missing Parameters"
       exit -1
     else    
-      fleetctl start "postgresql@$app.service"
-    
-      wait_service $app "postgresql" "addons/postgresql" 
+      
+      if [[ $(fleetctl list-units | grep postgresql-discovery@demo | grep running | wc -l) -eq 0 ]]; then
+      
+        fleetctl start "postgresql@$app.service"
+        
+        echo "waiting 60 secs..."
+        sleep 60
+      
+        wait_service $app "postgresql" "addons/postgresql" 
+        
+      fi
       
       # Ensure postgres config is set
-      etcdctl set /apps/$app/addons/postgresql postgres://usr_$app:$(echo $app | md5sum -- | cut -d ' ' -f 1 | base64)@$(docker port $(docker ps | grep postgresql-$app | awk '{print $1}') 5432)/db_$app
-      echo "Postgres set to: $(etcdctl get /apps/$app/addons/postgresql)"
+      # etcdctl set /apps/$app/addons/postgresql postgres://usr_$app:$(echo $app | md5sum -- | cut -d ' ' -f 1 | base64)@$(docker port $(docker ps | grep postgresql-$app | awk '{print $1}') 5432)/db_$app
+      # echo "Postgres set to: $(etcdctl get /apps/$app/addons/postgresql)"
       
       $0 apps:run $app rake db:migrate &> /dev/null || true
     
       for unit in $(fleetctl list-units | grep $app | grep -v 'running\|discovery' | awk '{print $1}'); do
         if [[ "$unit" == *notify* ]]; then
-          wait_service $app "core-live" "apis/core/live/$app-1"
+          # wait_service $app "core-live" "apis/core/live/$app-1"
+          echo "apps:start --> $unit"
           fleetctl start $unit          
         else
+          echo "apps:start --> $unit"          
           fleetctl start $unit
         fi
       done
       
       # notify api always failing on first try :( , so make it running
-      for unit in $(fleetctl list-units | grep $app | grep failed | grep -v 'discovery' | awk '{print $1}'); do
-        fleetctl stop $unit
-        fleetctl start $unit      
-      done
+      # for unit in $(fleetctl list-units | grep $app | grep -v 'discovery\|running' | awk '{print $1}'); do
+      #   fleetctl stop $unit
+      #   fleetctl start $unit
+      # done
     fi
   ;;
 
@@ -213,6 +227,7 @@ case "$1" in
       exit -1
     else
       for unit in $(fleetctl list-units | grep $app | grep -v 'discovery' | awk '{print $1}'); do
+        echo "apps:stop --> $unit"
         fleetctl stop $unit
       done
     fi

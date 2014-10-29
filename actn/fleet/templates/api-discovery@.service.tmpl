@@ -11,17 +11,16 @@ After=etcd.service
 After=docker.service
 After=$api-$endpoint@%i.service
 BindsTo=$api-$endpoint@%i.service
-Before=%p-notify@%i.service
+#Before=%p-notify@%i.service
 
 
 [Service]
-RestartSec=60
 EnvironmentFile=/etc/environment
-ExecStart=/bin/sh -c "while true; do etcdctl set /apps/$app/apis/$api/$endpoint/%i $(docker port $(docker ps | grep $api-$endpoint-%i | awk '{print $1}') 9000) --ttl 60; sleep 45; done"
+ExecStart=/bin/sh -c "while true; do etcdctl set /apps/$app/apis/$api/$endpoint/%i $(docker port $(docker ps | grep $api-$endpoint-%i | awk '{print $1}') 9000) --ttl 30; sleep 20; done"
 ExecStop=/usr/bin/etcdctl rm /apps/$app/apis/$api/$endpoint/%i
 
-[Install]
-WantedBy=app@$app.target
+#[Install]
+#WantedBy=app@$app.target
 
 [X-Fleet]
 X-ConditionMachineOf=$api-$endpoint@%i.service

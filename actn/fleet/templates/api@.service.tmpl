@@ -23,13 +23,14 @@ ExecStartPre=/usr/bin/docker pull hackberry/actn-$api
 ExecStartPre=-/usr/bin/docker kill %p-%i
 ExecStartPre=-/usr/bin/docker rm %p-%i
 
-ExecStart=/bin/bash -c '/usr/bin/docker run --name %p-%i -p ${COREOS_PRIVATE_IPV4}::9000 -e RACK_ENV=production -e APP=$app -e SECRET=$(etcdctl get /apps/$app/secret) -e DATABASE_URL=$(etcdctl get /apps/$app/addons/postgresql) hackberry/actn-$api actn-api $endpoint -sv -p 9000'
+ExecStart=/bin/bash -c '/usr/bin/docker run --name %p-%i -p ${COREOS_PUBLIC_IPV4}::9000 -e RACK_ENV=production -e APP=$app -e SECRET=$(etcdctl get /apps/$app/secret) -e DATABASE_URL=$(etcdctl get /apps/$app/addons/postgresql) hackberry/actn-$api actn-api $endpoint -sv -p 9000'
 
 ExecStop=/usr/bin/docker stop %p-%i
 
 
-[Install]
-WantedBy=app@$app.target
+#[Install]
+#WantedBy=app@$app.target
 
 [X-Fleet]
-X-Conflicts=%p@$i.service
+X-Conflicts=%p@%i.service
+X-ConditionMachineMetadata="tag=demo"
