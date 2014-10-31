@@ -1,0 +1,38 @@
+[Unit]
+Description=Actn.io %p %i service
+
+# Requirements
+Requires=etcd.service
+Requires=docker.service
+Requires=postgresql-discovery@devos.service
+Requires=core-live-discovery@%i.service
+
+# Dependency ordering
+After=etcd.service
+After=docker.service
+After=postgresql-discovery@devos.service
+After=core-live-discovery@%i.service
+
+[Service]
+TimeoutStartSec=0
+KillMode=none
+EnvironmentFile=/etc/environment
+
+ExecStartPre=/usr/bin/docker pull hackberry/actn-core
+
+ExecStartPre=-/usr/bin/docker kill %p-%i
+ExecStartPre=-/usr/bin/docker rm %p-%i
+
+ExecStart=/bin/bash -c '/usr/bin/docker run --name %p-%i -p ${COREOS_PUBLIC_IPV4}::9000 -e RACK_ENV=production -e APP=devos -e WS_URI=ws://$(etcdctl get /apps/devos/apis/core/live/%i) -e DATABASE_URL=$(etcdctl get /apps/devos/addons/postgresql) hackberry/actn-core rake jobs:notify'
+
+ExecStartPost=/usr/bin/etcdctl set /apps/devos/apis/core/notify/%i $(docker port $(docker ps | grep %p-%i | awk '{print $1}') 9000)
+
+ExecStop=/usr/bin/docker stop %p-%i
+
+
+#[Install]
+#WantedBy=app@devos.target
+
+[X-Fleet]
+X-ConditionMachineOf=core-live@%i.service
+X-Conflicts=%p@*.service

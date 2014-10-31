@@ -4,13 +4,13 @@ Description=Actn.io %p %i service
 # Requirements
 Requires=etcd.service
 Requires=docker.service
-Requires=postgresql-discovery@$app.service
+Requires=postgresql-discovery@devos.service
 Requires=%p-discovery@%i.service
 
 # Dependency ordering
 After=etcd.service
 After=docker.service
-After=postgresql-discovery@$app.service
+After=postgresql-discovery@devos.service
 Before=%p-discovery@%i.service
 
 [Service]
@@ -18,18 +18,18 @@ TimeoutStartSec=0
 KillMode=none
 EnvironmentFile=/etc/environment
 
-ExecStartPre=/usr/bin/docker pull hackberry/actn-$api
+ExecStartPre=/usr/bin/docker pull hackberry/actn-core
 
 ExecStartPre=-/usr/bin/docker kill %p-%i
 ExecStartPre=-/usr/bin/docker rm %p-%i
 
-ExecStart=/bin/bash -c '/usr/bin/docker run --name %p-%i -p ${COREOS_PUBLIC_IPV4}::9000 -e RACK_ENV=production -e APP=$app -e SECRET=$(etcdctl get /apps/$app/secret) -e DATABASE_URL=$(etcdctl get /apps/$app/addons/postgresql) hackberry/actn-$api actn-api $endpoint -sv -p 9000'
+ExecStart=/bin/bash -c '/usr/bin/docker run --name %p-%i -p ${COREOS_PUBLIC_IPV4}::9000 -e RACK_ENV=production -e APP=devos -e SECRET=$(etcdctl get /apps/devos/secret) -e DATABASE_URL=$(etcdctl get /apps/devos/addons/postgresql) hackberry/actn-core actn-api live -sv -p 9000'
 
 ExecStop=/usr/bin/docker stop %p-%i
 
 
 #[Install]
-#WantedBy=app@$app.target
+#WantedBy=app@devos.target
 
 [X-Fleet]
 X-Conflicts=%p@%i.service

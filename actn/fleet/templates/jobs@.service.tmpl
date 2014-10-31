@@ -32,6 +32,6 @@ ExecStop=/usr/bin/docker stop %p-%i
 #[Install]
 #WantedBy=app@$app.target
 
-#[X-Fleet]
+[X-Fleet]
 X-Conflicts=%p@%i.service
-X-ConditionMachineMetadata="tag=demo"
+#X-ConditionMachineMetadata="tag=demo"
