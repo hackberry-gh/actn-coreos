@@ -3,9 +3,10 @@ coreos:
   etcd:
     addr: $public_ipv4:4001
     peer-addr: $public_ipv4:7001
-    discovery: https://discovery.etcd.io/a058734e4a29871bdb052a3ae551ba3b
+    discovery: https://discovery.etcd.io/39c2939f58474798583842684fa6c30d
   fleet:
     public-ip: $public_ipv4
+		metadata: tag=dev,tag=lb
   units:
   - name: etcd.service
     command: start

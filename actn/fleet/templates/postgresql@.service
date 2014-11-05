@@ -17,14 +17,14 @@ KillMode=none
 EnvironmentFile=/etc/environment
 Restart=on-failure
 
-ExecStartPre=-/bin/sh -c "mkdir /home/core/%p-%i"
+ExecStartPre=-/bin/bash -c "sudo -u core mkdir /home/core/%p-%i"
 ExecStartPre=-/usr/bin/docker kill %p-%i
 ExecStartPre=-/usr/bin/docker rm -f %p-%i
-ExecStartPre=/usr/bin/docker pull valley/postgresql
+ExecStartPre=/usr/bin/docker pull hackberry/actn-postgresql
 
-ExecStart=/bin/sh -c "docker run --name %p-%i -v /home/core/%p-%i:/var/lib/postgresql -p ${COREOS_PUBLIC_IPV4}::5432 -e PORT=5432 -e POSTGRESQL_USER=usr_%i -e POSTGRESQL_PASS=$(echo %i | md5sum -- | cut -d ' ' -f 1 | base64) -e POSTGRESQL_DB=db_%i valley/postgresql"
+ExecStart=/bin/sh -c "docker run --name %p-%i -v /home/core/%p-%i:/var/lib/postgresql -p ${COREOS_PUBLIC_IPV4}::5432 -e PORT=5432 -e POSTGRESQL_USER=usr_%i -e POSTGRESQL_PASS=$(echo %i | md5sum -- | cut -d ' ' -f 1 | base64) -e POSTGRESQL_DB=db_%i hackberry/actn-postgresql"
 ExecStop=/usr/bin/docker stop %p-%i
 
 [X-Fleet]
 X-Conflicts=%p@%i.service
-# X-ConditionMachineMetadata="tag=demo"
+X-ConditionMachineMetadata="tag=%i"

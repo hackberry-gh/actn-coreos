@@ -1,3 +1,2 @@
 .vagrant
-userdata.txt
-actn/fleet/instances
+actn/fleet/instances/*

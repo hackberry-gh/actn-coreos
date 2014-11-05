@@ -313,6 +313,7 @@ case "$1" in
       sleep 2
       $(etcdctl rm /apps/$app --recursive 2> /dev/null) || true
       docker_cleanup $app true
+      safe_rm /home/core/postgresql-$app
     fi
   ;;
   
